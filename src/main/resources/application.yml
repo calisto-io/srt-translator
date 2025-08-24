@@ -28,8 +28,8 @@ output:
   replace-string: ""
 
 languages:
-  input: ""
-  output: ""
+  input: "Japanese"
+  output: "English"
 
 directories:
   input: ""
