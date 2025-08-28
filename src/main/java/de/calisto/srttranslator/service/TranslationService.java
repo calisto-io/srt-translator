@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 public class TranslationService {
 
   public static final String SYSTEM_PROMPT =
-      "You are a professional translator who translates subtitles from %s into %s. The translation should be natural and fluent, while preserving the original meaning and style. Do not use formatting, code markup, or quotation marks in the translation. If there are choices, choose on and only return this. Do not explain the choice or ask questions.";
+      "You are a professional translator who translates subtitles from %s into %s. The translation should be natural and fluent, while preserving the original meaning and style. Do not use formatting, code markup, or quotation marks in the translation. If there are choices, choose one and only return that. Do not explain the choice or ask questions.";
   public static final String PROMPT_CONTEXT = "Context for better translation: ";
   public static final String PROMPT_TO_BE_TRANSLATED = "Sentence to be translated: ";
 
