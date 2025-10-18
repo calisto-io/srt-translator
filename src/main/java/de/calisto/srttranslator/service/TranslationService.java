@@ -109,7 +109,9 @@ public class TranslationService {
   private void translateEntries(final List<SubtitleEntry> subtitleEntries) {
     //    for (var subtitleIndex = 0; subtitleIndex < 10; subtitleIndex++) {
     for (var subtitleIndex = 0; subtitleIndex < subtitleEntries.size(); subtitleIndex++) {
-      System.out.println("Processing sentence " + subtitleIndex + ":");
+      if (subtitleIndex % 20 == 0) {
+        System.out.println("Processing sentence " + subtitleIndex + ":");
+      }
       final var context = new StringBuilder();
       for (var index = 1; index <= 4; index++) {
         if (subtitleIndex - index >= 0) {
