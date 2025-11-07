@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,34 +50,36 @@ public class TranslationService {
   private final ChatClient chatClient;
 
   @Autowired
-  public TranslationService(ChatClient.Builder chatClientBuilder) {
+  public TranslationService(final ChatClient.Builder chatClientBuilder) {
     this.chatClient = chatClientBuilder.build();
   }
 
   public void translate() {
     try {
-      List<Path> srtFiles;
-      try (var pathStream = Files.list(Paths.get(dirInput))) {
+      final List<Path> srtFiles;
+      try (final var pathStream = Files.list(Paths.get(dirInput))) {
         srtFiles =
-            pathStream.filter(path -> path.toString().toLowerCase().endsWith(".srt")).toList();
+            pathStream
+                .filter(path -> path.toString().toLowerCase(Locale.ROOT).endsWith(".srt"))
+                .toList();
       }
 
-      for (Path srtFile : srtFiles) {
+      for (final var srtFile : srtFiles) {
         System.out.println("Processing file: " + srtFile.toFile().getAbsolutePath());
-        List<SubtitleEntry> subtitleEntries = new ArrayList<>();
-        List<String> lines = Files.readAllLines(srtFile);
+        final List<SubtitleEntry> subtitleEntries = new ArrayList<>();
+        final var lines = Files.readAllLines(srtFile);
 
-        int i = 0;
+        var i = 0;
         while (i < lines.size()) {
           if (lines.get(i).trim().isEmpty()) {
             i++;
             continue;
           }
 
-          int number = Integer.parseInt(lines.get(i));
-          String timeCode = lines.get(i + 1);
+          final var number = Integer.parseInt(lines.get(i));
+          final var timeCode = lines.get(i + 1);
 
-          StringBuilder text = new StringBuilder();
+          final var text = new StringBuilder();
           i += 2;
           while (i < lines.size() && !lines.get(i).trim().isEmpty()) {
             text.append(lines.get(i)).append("\n");
@@ -98,16 +101,16 @@ public class TranslationService {
         writeSrtFile(srtFile, subtitleEntries);
         System.out.println("Finished: " + srtFile.getFileName());
       }
-    } catch (IOException e) {
+    } catch (final IOException e) {
       throw new RuntimeException("Error reading SRT files", e);
     }
   }
 
-  private void translateEntries(List<SubtitleEntry> subtitleEntries) {
+  private void translateEntries(final List<SubtitleEntry> subtitleEntries) {
     //    for (var subtitleIndex = 0; subtitleIndex < 10; subtitleIndex++) {
     for (var subtitleIndex = 0; subtitleIndex < subtitleEntries.size(); subtitleIndex++) {
       System.out.println("Processing sentence " + subtitleIndex + ":");
-      var context = new StringBuilder();
+      final var context = new StringBuilder();
       for (var index = 1; index <= 4; index++) {
         if (subtitleIndex - index >= 0) {
           context
@@ -131,7 +134,7 @@ public class TranslationService {
       }
 
       try {
-        String translation =
+        final var translation =
             chatClient
                 .prompt()
                 .system(
@@ -145,24 +148,24 @@ public class TranslationService {
                 .user(PROMPT_TO_BE_TRANSLATED + subtitleEntries.get(subtitleIndex).orgText())
                 .call()
                 .content();
-        var updatedEntry =
+        final var updatedEntry =
             new SubtitleEntry(
                 subtitleEntries.get(subtitleIndex).number(),
                 subtitleEntries.get(subtitleIndex).timeCode(),
                 subtitleEntries.get(subtitleIndex).orgText(),
                 translation);
         subtitleEntries.set(subtitleIndex, updatedEntry);
-      } catch (Exception e) {
+      } catch (final Exception e) {
         throw new RuntimeException("Error calling AI service", e);
       }
     }
   }
 
-  private void writeSrtFile(Path srtFile, List<SubtitleEntry> subtitleEntries) {
-    Path outputPath =
+  private void writeSrtFile(final Path srtFile, final List<SubtitleEntry> subtitleEntries) {
+    final var outputPath =
         Paths.get(dirOutput, srtFile.getFileName().toString().replace(outputReplaceString, ""));
-    List<String> outputLines = new ArrayList<>();
-    for (SubtitleEntry entry : subtitleEntries) {
+    final List<String> outputLines = new ArrayList<>();
+    for (final var entry : subtitleEntries) {
       outputLines.add(String.valueOf(entry.number()));
       outputLines.add(entry.timeCode());
       outputLines.add(entry.transText());
@@ -170,7 +173,7 @@ public class TranslationService {
     }
     try {
       Files.write(outputPath, outputLines);
-    } catch (IOException e) {
+    } catch (final IOException e) {
       throw new RuntimeException("Error writing SRT file", e);
     }
   }

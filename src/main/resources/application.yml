@@ -19,7 +19,8 @@ logging:
   level:
     org:
       springframework:
-        ai: DEBUG
+#        ai: DEBUG
+#        web: DEBUG
 
 prompt:
   add-to-system: ""
