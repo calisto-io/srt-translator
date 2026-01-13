@@ -7,6 +7,10 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,6 +52,10 @@ public class TranslationService {
   private String outputLanguage;
 
   private final ChatClient chatClient;
+
+  // Thread-Pool für parallele LLM-Calls
+  private final ExecutorService translationExecutor =
+      Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors()));
 
   @Autowired
   public TranslationService(final ChatClient.Builder chatClientBuilder) {
@@ -107,60 +115,86 @@ public class TranslationService {
   }
 
   private void translateEntries(final List<SubtitleEntry> subtitleEntries) {
-    //    for (var subtitleIndex = 0; subtitleIndex < 10; subtitleIndex++) {
-    for (var subtitleIndex = 0; subtitleIndex < subtitleEntries.size(); subtitleIndex++) {
-      if (subtitleIndex % 20 == 0) {
-        System.out.println("Processing sentence " + subtitleIndex + ":");
-      }
-      final var context = new StringBuilder();
-      for (var index = 1; index <= 4; index++) {
-        if (subtitleIndex - index >= 0) {
-          context
-              .append("Previous sentence ")
-              .append(index)
-              .append(": ")
-              .append(subtitleEntries.get(subtitleIndex - index).orgText())
-              .append("\n");
-        }
-      }
+    final int size = subtitleEntries.size();
 
-      for (var index = 1; index <= 4; index++) {
-        if (subtitleIndex + index < subtitleEntries.size()) {
-          context
-              .append("Next sentence ")
-              .append(index)
-              .append(": ")
-              .append(subtitleEntries.get(subtitleIndex + index).orgText())
-              .append("\n");
-        }
-      }
+    // Parallele Aufrufe, Reihenfolge bleibt über Index erhalten
+    final List<CompletableFuture<Void>> futures =
+        IntStream.range(0, size)
+            .mapToObj(
+                subtitleIndex ->
+                    CompletableFuture.runAsync(
+                        () -> {
+                          if (subtitleIndex % 20 == 0) {
+                            System.out.println("Processing sentence " + subtitleIndex + ":");
+                          }
 
-      try {
-        final var translation =
-            chatClient
-                .prompt()
-                .system(
-                    String.format(SYSTEM_PROMPT, inputLanguage, outputLanguage)
-                        + addToSystemPrompt
-                        + "\n\n"
-                        + PROMPT_CONTEXT
-                        + "\n"
-                        + context
-                        + "\n")
-                .user(PROMPT_TO_BE_TRANSLATED + subtitleEntries.get(subtitleIndex).orgText())
-                .call()
-                .content();
-        final var updatedEntry =
-            new SubtitleEntry(
-                subtitleEntries.get(subtitleIndex).number(),
-                subtitleEntries.get(subtitleIndex).timeCode(),
-                subtitleEntries.get(subtitleIndex).orgText(),
-                translation);
-        subtitleEntries.set(subtitleIndex, updatedEntry);
-      } catch (final Exception e) {
-        throw new RuntimeException("Error calling AI service", e);
+                          final var context = buildContext(subtitleEntries, subtitleIndex);
+
+                          try {
+                            final var translation =
+                                chatClient
+                                    .prompt()
+                                    .system(
+                                        String.format(SYSTEM_PROMPT, inputLanguage, outputLanguage)
+                                            + addToSystemPrompt
+                                            + "\n\n"
+                                            + PROMPT_CONTEXT
+                                            + "\n"
+                                            + context
+                                            + "\n")
+                                    .user(
+                                        PROMPT_TO_BE_TRANSLATED
+                                            + subtitleEntries.get(subtitleIndex).orgText())
+                                    .call()
+                                    .content();
+
+                            final var original = subtitleEntries.get(subtitleIndex);
+                            final var updatedEntry =
+                                new SubtitleEntry(
+                                    original.number(),
+                                    original.timeCode(),
+                                    original.orgText(),
+                                    translation);
+
+                            // Ergebnis an der richtigen Stelle zurückschreiben
+                            subtitleEntries.set(subtitleIndex, updatedEntry);
+                          } catch (final Exception e) {
+                            throw new RuntimeException("Error calling AI service", e);
+                          }
+                        },
+                        translationExecutor))
+            .toList();
+
+    // Warten, bis alle Übersetzungen fertig sind
+    futures.forEach(CompletableFuture::join);
+  }
+
+  private String buildContext(final List<SubtitleEntry> subtitleEntries, final int subtitleIndex) {
+    final var context = new StringBuilder();
+
+    for (var index = 1; index <= 4; index++) {
+      if (subtitleIndex - index >= 0) {
+        context
+            .append("Previous sentence ")
+            .append(index)
+            .append(": ")
+            .append(subtitleEntries.get(subtitleIndex - index).orgText())
+            .append("\n");
       }
     }
+
+    for (var index = 1; index <= 4; index++) {
+      if (subtitleIndex + index < subtitleEntries.size()) {
+        context
+            .append("Next sentence ")
+            .append(index)
+            .append(": ")
+            .append(subtitleEntries.get(subtitleIndex + index).orgText())
+            .append("\n");
+      }
+    }
+
+    return context.toString();
   }
 
   private void writeSrtFile(final Path srtFile, final List<SubtitleEntry> subtitleEntries) {
